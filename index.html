@@ -1,0 +1,2267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Control de Camiones — Luis y Chava</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet Map for Cube GPS Pro -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    #cube-map {
+      height: 400px;
+      width: 100%;
+      border-radius: 1rem;
+      z-index: 10;
+    }
+    .license-plate {
+      box-shadow: inset 0 0 0 3px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06);
+    }
+    .pulse-green {
+      animation: pulse-ring 2s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.6); }
+      70% { box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-12">
+
+  <!-- LOCK SCREEN: 100% PRIVATE ZERO-KNOWLEDGE ENCRYPTED VAULT -->
+  <div id="privacy-lock-modal" class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 text-center space-y-5 relative">
+      <div class="w-16 h-16 rounded-3xl bg-emerald-600 text-white flex items-center justify-center text-3xl mx-auto shadow-lg shadow-emerald-600/30">
+        🔒
+      </div>
+      <div>
+        <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-extrabold uppercase tracking-wider">
+          Privacidad 100% Cifrada (AES-256)
+        </span>
+        <h2 class="text-2xl font-extrabold text-slate-900 mt-2">
+          Envíos Luis y Chava
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+          Todo lo que escribas o subas se <strong>cifra en tu celular</strong> con su clave secreta antes de guardarse en la nube. <strong>Nadie más puede ver sus envíos, fotos ni mensajes.</strong>
+        </p>
+      </div>
+
+      <!-- Choose User on Lock Screen -->
+      <div class="text-left">
+        <label class="block text-xs font-extrabold uppercase text-slate-500 mb-1.5">1. ¿Quién está entrando?</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            id="lock-btn-luis"
+            onclick="selectLockUser('Luis')"
+            class="py-3 px-3 rounded-2xl font-extrabold text-sm border-2 border-emerald-600 bg-emerald-50 text-emerald-900 transition"
+          >
+            👋 Luis (Envía en LA)
+          </button>
+          <button
+            type="button"
+            id="lock-btn-chava"
+            onclick="selectLockUser('Chava')"
+            class="py-3 px-3 rounded-2xl font-extrabold text-sm border-2 border-slate-200 bg-white text-slate-700 transition"
+          >
+            🤠 Chava (Recibe en GDL)
+          </button>
+        </div>
+      </div>
+
+      <!-- Secret Passphrase Form -->
+      <form onsubmit="handleUnlockVault(event)" class="space-y-4 text-left">
+        <div>
+          <label class="block text-xs font-extrabold uppercase text-slate-500 mb-1.5">
+            2. Contraseña Privada de Luis y Chava *
+          </label>
+          <div class="relative">
+            <input
+              id="vault-passphrase-input"
+              type="password"
+              required
+              minlength="4"
+              placeholder="Elige o escribe tu contraseña aquí..."
+              class="w-full bg-slate-50 border-2 border-slate-300 focus:border-emerald-600 rounded-2xl px-4 py-3.5 text-base font-extrabold text-slate-900 outline-none pr-20"
+            />
+            <button
+              type="button"
+              onclick="togglePassphraseVisibility()"
+              id="toggle-pass-btn"
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-slate-300 text-xs font-bold text-slate-700"
+            >
+              Ver
+            </button>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 mt-2.5 text-xs text-emerald-900 space-y-1">
+            <p class="font-extrabold">🔑 ¿Cómo eligen su contraseña?</p>
+            <p>
+              <strong>La primera vez que entren</strong>, la contraseña que Luis o Chava escriba aquí arriba se convierte automáticamente en su <strong>llave privada cifrada</strong>. Solo deben ponerse de acuerdo (por teléfono o en persona) y escribir esa misma contraseña en ambos celulares.
+            </p>
+          </div>
+        </div>
+
+        <div id="vault-unlock-error" class="hidden bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3 rounded-2xl"></div>
+
+        <button
+          type="submit"
+          id="vault-unlock-btn"
+          class="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-base shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2"
+        >
+          <span>🔓 Crear / Entrar con esta Contraseña</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOP HEADER: SIMPLE, BIG & FRIENDLY -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- App Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/25 text-2xl">
+          🚛
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 leading-tight">
+              Envíos Luis y Chava
+            </h1>
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-extrabold">
+              🇺🇸 LA ➔ 🇲🇽 GDL
+            </span>
+          </div>
+          <p class="text-xs sm:text-sm font-medium text-slate-500">
+            Ruta exclusiva: <strong>Los Ángeles, CA (LA) ➔ Guadalajara, Jalisco (GDL)</strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Who is using the app right now? (Big 2-button toggle) -->
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="bg-slate-100 p-1.5 rounded-2xl border border-slate-200 flex items-center gap-1">
+          <span class="text-xs font-bold text-slate-500 px-2 hidden md:inline">¿Quién eres?</span>
+          <button
+            id="btn-user-luis"
+            onclick="setActiveUser('Luis')"
+            class="px-4 py-2 rounded-xl text-sm font-bold transition bg-emerald-600 text-white shadow-sm"
+          >
+            👋 Soy Luis (Envía en LA)
+          </button>
+          <button
+            id="btn-user-chava"
+            onclick="setActiveUser('Chava')"
+            class="px-4 py-2 rounded-xl text-sm font-bold transition text-slate-600 hover:bg-white"
+          >
+            🤠 Soy Chava (Recibe en GDL)
+          </button>
+        </div>
+
+        <button
+          onclick="openNewTrailerModal()"
+          class="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm sm:text-base px-4 py-2.5 rounded-2xl flex items-center gap-2 shadow-md shadow-blue-600/20 transition"
+        >
+          <i data-lucide="plus" class="w-5 h-5"></i>
+          <span>Nuevo Remolque</span>
+        </button>
+
+        <button
+          onclick="lockVault()"
+          title="Cerrar y bloquear bóveda privada"
+          class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-2xl flex items-center gap-1.5 transition"
+        >
+          <span>🔒 Bloquear</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+
+    <!-- SUPABASE TABLE SETUP HELPER BANNER (ONLY SHOWN IF SQL TABLE NOT CREATED YET) -->
+    <div id="supabase-setup-banner" class="hidden bg-amber-50 border-2 border-amber-300 rounded-3xl p-4 sm:p-5 shadow-xs">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 class="text-sm sm:text-base font-extrabold text-amber-950 flex items-center gap-2">
+            ⚡ Último paso en Supabase: Crear tabla privada cifrada (1 clic)
+          </h3>
+          <p class="text-xs sm:text-sm text-amber-900 mt-0.5">
+            Copia este código SQL y pégalo en el <strong>SQL Editor</strong> de tu proyecto Supabase (<code>zhubeuufgxikxcvziewf</code>) y dale clic a <strong>Run</strong>:
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            onclick="copySupabaseSql()"
+            id="copy-sql-btn"
+            class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs sm:text-sm shadow-xs transition"
+          >
+            📋 Copiar SQL y Abrir Supabase SQL Editor
+          </button>
+          <button
+            onclick="syncFromCloudNow()"
+            class="px-3.5 py-2 rounded-xl bg-white border border-amber-400 text-amber-950 font-bold text-xs sm:text-sm hover:bg-amber-100 transition"
+          >
+            🔄 Ya le di Run, Probar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 1: CHOOSE THE TRAILER NUMBER (BIG EASY CARDS) -->
+    <section>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="text-base sm:text-lg font-extrabold text-slate-800 flex items-center gap-2">
+          <span class="w-7 h-7 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center">1</span>
+          Elige el Número de Remolque (Caja) que quieres ver:
+        </h2>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span id="cloud-sync-badge" class="text-xs sm:text-sm font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-full flex items-center gap-1.5">
+            🔒 Cifrado AES-256 · Nube Privada
+          </span>
+          <button
+            onclick="syncFromCloudNow()"
+            class="text-xs font-bold bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 px-3 py-1 rounded-full transition"
+          >
+            🔄 Sincronizar
+          </button>
+        </div>
+      </div>
+
+      <div id="trailer-selector-cards" class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- STEP 2: NAVIGATION TABS FOR THIS TRAILER + CUBE GPS MAP -->
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm p-2 sm:p-3">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <button
+          id="tab-btn-info"
+          onclick="switchMainTab('info')"
+          class="py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition bg-slate-900 text-white shadow"
+        >
+          <span>📋 Placas, Cajas y Revisión</span>
+        </button>
+        <button
+          id="tab-btn-photos"
+          onclick="switchMainTab('photos')"
+          class="py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
+          <span>📸 Fotos del Envío</span>
+          <span id="photo-count-pill" class="px-2 py-0.5 text-xs rounded-full bg-amber-500 text-white">4</span>
+        </button>
+        <button
+          id="tab-btn-gps"
+          onclick="switchMainTab('gps')"
+          class="py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition bg-slate-100 text-slate-700 hover:bg-slate-200"
+        >
+          <span>📍 Mapa Cube GPS en Vivo</span>
+        </button>
+        <button
+          id="tab-btn-chat"
+          onclick="switchMainTab('chat')"
+          class="py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition bg-slate-100 text-slate-700 hover:bg-slate-200 lg:hidden"
+        >
+          <span>💬 Chat con Compadre</span>
+        </button>
+        <div class="hidden lg:flex items-center justify-center py-3 px-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-sm gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-600 pulse-green"></span>
+          <span>Chat abierto a la derecha 👉</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN WORKSPACE: LEFT SIDE (ACTIVE TAB) + RIGHT SIDE (ALWAYS-VISIBLE WHATSAPP-STYLE CHAT) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- LEFT 7 COLUMNS: CONTENT OF SELECTED TAB -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- TAB 1: PLACAS, EMBARCADOR, CAJAS, LLANTAS EE.UU. Y CHECKLIST -->
+        <div id="tab-panel-info" class="space-y-6">
+          
+          <!-- Banner & Quick 1-Tap Status Changer -->
+          <div id="trailer-summary-banner" class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- REALISTIC VISUAL LICENSE PLATES (TRAILER + US FRONT + MX FRONT) -->
+          <div class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  🏷️ Placas de este Envío
+                </h3>
+                <p class="text-sm text-slate-500">Placa de la caja atrás y las 2 placas delanteras del camión (Americana y Mexicana)</p>
+              </div>
+              <button onclick="openEditPlatesModal()" class="text-sm font-bold text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200 transition">
+                ✏️ Cambiar Placas
+              </button>
+            </div>
+
+            <div id="visual-plates-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- SHIPPER & BIG BOX COUNTER -->
+          <div id="shipper-boxes-card" class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- US TIRE TREAD DEPTH & EASY 1-TAP CHECKLIST -->
+          <div id="tires-and-checks-card" class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+            <!-- Populated by JS -->
+          </div>
+
+        </div>
+
+        <!-- TAB 2: SHIPMENT PHOTOS (1-CLICK UPLOAD PER CATEGORY) -->
+        <div id="tab-panel-photos" class="hidden space-y-6">
+          <div class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+            <h3 class="text-xl font-extrabold text-slate-900 mb-1">
+              📸 Fotos del Remolque <span id="photos-trailer-title" class="text-emerald-600">#TR-4082</span>
+            </h3>
+            <p class="text-sm text-slate-500 mb-4">
+              Toca cualquiera de estos botones grandes para tomar o subir la foto directamente (sin complicarte):
+            </p>
+
+            <!-- 4 BIG ONE-TAP PHOTO BUTTONS -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+              <button onclick="triggerQuickPhoto('Placas Delanteras (Americana y Mexicana)')" class="p-4 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50/60 hover:bg-blue-100/70 text-left flex items-center gap-3.5 transition active:scale-98">
+                <div class="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shrink-0">🇺🇸🇲🇽</div>
+                <div>
+                  <span class="font-extrabold text-slate-900 text-sm sm:text-base block">+ Subir Foto Placas Delanteras</span>
+                  <span class="text-xs text-slate-600">Placa Americana y Placa Mexicana</span>
+                </div>
+              </button>
+
+              <button onclick="triggerQuickPhoto('Placa de la Caja / Remolque y Sello')" class="p-4 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/60 hover:bg-amber-100/70 text-left flex items-center gap-3.5 transition active:scale-98">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-2xl shrink-0">🏷️</div>
+                <div>
+                  <span class="font-extrabold text-slate-900 text-sm sm:text-base block">+ Subir Foto Placa del Remolque</span>
+                  <span class="text-xs text-slate-600">Puertas traseras y sello puesto</span>
+                </div>
+              </button>
+
+              <button onclick="triggerQuickPhoto('Cajas Cargadas del Embarcador')" class="p-4 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/60 hover:bg-emerald-100/70 text-left flex items-center gap-3.5 transition active:scale-98">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-2xl shrink-0">📦</div>
+                <div>
+                  <span class="font-extrabold text-slate-900 text-sm sm:text-base block">+ Subir Foto de las Cajas</span>
+                  <span class="text-xs text-slate-600">Mercancía acomodada adentro</span>
+                </div>
+              </button>
+
+              <button onclick="triggerQuickPhoto('Medidor de Dibujo de Llantas (EE. UU.)')" class="p-4 rounded-2xl border-2 border-dashed border-purple-300 bg-purple-50/60 hover:bg-purple-100/70 text-left flex items-center gap-3.5 transition active:scale-98">
+                <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-2xl shrink-0">🛞</div>
+                <div>
+                  <span class="font-extrabold text-slate-900 text-sm sm:text-base block">+ Subir Foto de las Llantas</span>
+                  <span class="text-xs text-slate-600">Evidencia del dibujo para el DOT</span>
+                </div>
+              </button>
+            </div>
+
+            <input type="file" id="quick-photo-input" accept="image/*" class="hidden" onchange="handleQuickPhotoSelected(event)" />
+
+            <!-- Photo Gallery -->
+            <div id="friendly-photos-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: CUBE GPS PRO REAL-TIME MAP (ALWAYS EASY TO READ) -->
+        <div id="tab-panel-gps" class="hidden space-y-6">
+          <div class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-2xl">🛰️</span>
+                  <h3 class="text-xl font-extrabold text-slate-900">Mapa Cube GPS Pro en Tiempo Real</h3>
+                </div>
+                <p class="text-sm text-slate-500">Rastreo del aparato Cube GPS Pro dentro de cada remolque en ruta de Los Ángeles (LA) a Guadalajara (GDL)</p>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button onclick="openCubeGpsModal()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold flex items-center gap-2 shadow-sm transition">
+                  🛰️ Configurar Cube GPS Pro
+                </button>
+                <button onclick="centerAllTrailers()" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-sm transition">
+                  🗺️ Ver Ruta Completa
+                </button>
+              </div>
+            </div>
+
+            <!-- Direct Cube Tracker App Link Bar inside GPS Tab -->
+            <div id="gps-tab-cube-link-bar" class="mb-4">
+              <!-- Populated by JS -->
+            </div>
+
+            <!-- Big Truck Location Buttons above Map -->
+            <div id="gps-truck-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <!-- Populated by JS -->
+            </div>
+
+            <!-- Interactive Map -->
+            <div id="cube-map" class="border-2 border-slate-200 shadow-inner"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT 5 COLUMNS: WHATSAPP-STYLE DIRECT CHAT BETWEEN COMPADRE CHAVA & CUÑADO -->
+      <div id="chat-column-wrapper" class="lg:col-span-5">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[700px] sticky top-24">
+          
+          <!-- Friendly WhatsApp-style Header -->
+          <div class="bg-emerald-700 text-white p-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center text-xl font-extrabold">
+                💬
+              </div>
+              <div>
+                <h3 class="font-extrabold text-base sm:text-lg leading-tight">
+                  Chat del Remolque <span id="chat-header-trailer" class="underline decoration-emerald-300">#TR-4082</span>
+                </h3>
+                <p class="text-xs text-emerald-100 font-medium">
+                  Plática directa: Luis ↔ Chava
+                </p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-emerald-800 text-emerald-100 text-xs font-bold flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span> En línea
+            </span>
+          </div>
+
+          <!-- 1-Tap Quick Messages Bar (So they don't even have to type while busy!) -->
+          <div class="bg-slate-50 border-b border-slate-200 p-2.5">
+            <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
+              ⚡ Toca para mandar aviso rápido:
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <button onclick="sendQuickMessage('📦 Ya quedó cargado el remolque aquí en Los Ángeles (LA) con cajas, placas y el Cube GPS adentro. Ya salió rumbo a Guadalajara.')" class="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-300 text-xs font-bold text-slate-800 shadow-2xs transition">
+                📦 Ya salió de LA rumbo a GDL
+              </button>
+              <button onclick="sendQuickMessage('🛰️ Ya pegué el link de la app Cube Tracker en el remolque para que vayas viendo por dónde viene el camión.')" class="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-300 text-xs font-bold text-slate-800 shadow-2xs transition">
+                🛰️ Link Cube GPS listo
+              </button>
+              <button onclick="sendQuickMessage('📍 Compadre, ya estamos listos acá en Guadalajara (GDL) esperando el camión. Ahorita lo checo en el Cube GPS.')" class="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-300 text-xs font-bold text-slate-800 shadow-2xs transition">
+                📍 Listos para recibir en GDL
+              </button>
+              <button onclick="sendQuickMessage('🇲🇽 ¡Ya llegó el remolque a Guadalajara (GDL) y recibimos todas las cajas completas!')" class="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-50 border border-slate-300 text-xs font-bold text-slate-800 shadow-2xs transition">
+                🇲🇽 ¡Ya recibimos en GDL!
+              </button>
+            </div>
+          </div>
+
+          <!-- Messages Feed -->
+          <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-[#efeae2]/60">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Big Friendly Input Area -->
+          <form onsubmit="handleChatSubmit(event)" class="p-3 bg-white border-t border-slate-200">
+            <div class="flex items-center justify-between text-xs text-slate-500 mb-2 px-1">
+              <span>Escribiendo como: <strong id="chat-active-sender" class="text-emerald-700 font-extrabold">Luis (EE. UU.)</strong></span>
+              <button type="button" onclick="toggleActiveUser()" class="text-blue-600 font-bold hover:underline">
+                Cambiar entre Luis y Chava
+              </button>
+            </div>
+            <div class="flex gap-2">
+              <input
+                id="chat-input"
+                type="text"
+                placeholder="Escribe tu mensaje aquí..."
+                class="flex-1 bg-slate-100 border border-slate-300 rounded-2xl px-4 py-3 text-sm sm:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white"
+              />
+              <button
+                type="submit"
+                class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold px-5 py-3 rounded-2xl flex items-center gap-2 shadow-md shadow-emerald-600/20 transition"
+              >
+                <span>Enviar</span>
+                <i data-lucide="send" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL: ADD NEW TRAILER (SUPER SIMPLE FORM) -->
+  <div id="new-trailer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">🚛</span>
+          <h3 class="text-xl font-extrabold text-slate-900">Agregar Nuevo Remolque</h3>
+        </div>
+        <button onclick="closeNewTrailerModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
+      </div>
+
+      <form onsubmit="handleCreateTrailer(event)" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">Número de Remolque (Caja) *</label>
+            <input id="new-trailer-number" required placeholder="Ej. TR-6025" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">🏷️ Placa del Remolque (Caja) *</label>
+            <input id="new-trailer-plate" required placeholder="Ej. 4TL-9910" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-blue-700 mb-1">🇺🇸 Placa Delantera Americana *</label>
+            <input id="new-us-plate" required placeholder="Ej. CA-9P8821" class="w-full bg-blue-50/50 border border-blue-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-emerald-700 mb-1">🇲🇽 Placa Delantera Mexicana *</label>
+            <input id="new-mx-plate" required placeholder="Ej. 52-AN-8K" class="w-full bg-emerald-50/50 border border-emerald-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-bold text-slate-700 mb-1">🏢 Nombre del Embarcador (Shipper) *</label>
+            <input id="new-shipper" required placeholder="Ej. Empacadora del Pacífico" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base text-slate-900" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-bold text-slate-700 mb-1">🪪 Chofer Asignado a este Viaje (Nombre y/o Teléfono) *</label>
+            <input id="new-driver-name" required placeholder="Ej. Arturo Gómez · Tel: (664) 555-0192" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">👥 ¿Cuántas Personas van en este envío? *</label>
+            <input id="new-people-count" type="number" required placeholder="Ej. 18" value="15" class="w-full bg-blue-50/50 border border-blue-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">📦 ¿Cuántas Cajas lleva en total? *</label>
+            <input id="new-boxes" type="number" required placeholder="Ej. 1400" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-cyan-800 mb-1">🛰️ ID / Serie de tu Cube GPS Pro (Opcional)</label>
+            <input id="new-cube-id" placeholder="Ej. CUBE-PRO-8841" class="w-full bg-cyan-50/50 border border-cyan-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-cyan-800 mb-1">🔗 Link de Rastreo Cube GPS (Opcional)</label>
+            <input id="new-cube-link" placeholder="Pega el link 'Share' de la app Cube Tracker" class="w-full bg-cyan-50/50 border border-cyan-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-bold text-slate-700 mb-1">📍 Ruta Fija (LA ➔ GDL) *</label>
+            <input id="new-route" required value="Los Ángeles, CA (LA) ➔ Guadalajara, JAL (GDL)" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+          <button type="button" onclick="closeNewTrailerModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 font-bold text-slate-700 hover:bg-slate-200">Cancelar</button>
+          <button type="submit" class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow-md">Guardar Remolque</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT PLATES EASILY -->
+  <div id="edit-plates-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+      <h3 class="text-xl font-extrabold text-slate-900 mb-4">✏️ Actualizar Placas</h3>
+      <form onsubmit="handleSavePlates(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">🏷️ Placa de la Caja / Remolque</label>
+          <input id="edit-trailer-plate" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold" />
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-blue-700 mb-1">🇺🇸 Placa Delantera Americana (EE. UU.)</label>
+          <input id="edit-us-plate" required class="w-full bg-blue-50/50 border border-blue-300 rounded-xl px-3.5 py-2.5 text-base font-bold" />
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-emerald-700 mb-1">🇲🇽 Placa Delantera Mexicana (MX)</label>
+          <input id="edit-mx-plate" required class="w-full bg-emerald-50/50 border border-emerald-300 rounded-xl px-3.5 py-2.5 text-base font-bold" />
+        </div>
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeEditPlatesModal()" class="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700">Cancelar</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 text-white font-extrabold">Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIGURE CUBE GPS PRO FOR SELECTED TRAILER -->
+  <div id="cube-gps-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-200 pb-4 mb-4">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">🛰️</span>
+          <div>
+            <h3 class="text-xl font-extrabold text-slate-900">Configurar Cube GPS Pro</h3>
+            <p class="text-xs text-slate-500">Conecta el aparato Cube GPS Pro o actualiza dónde viene el remolque</p>
+          </div>
+        </div>
+        <button onclick="closeCubeGpsModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
+      </div>
+
+      <form onsubmit="handleSaveCubeGps(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">🛰️ Número o Nombre de tu Aparato Cube GPS Pro</label>
+          <input id="edit-cube-id" required placeholder="Ej. CUBE-PRO-1 (Caja #1)" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-base font-bold text-slate-900" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-cyan-800 mb-1">🔗 Link en Vivo de la App "Cube Tracker" (Opcional)</label>
+          <input id="edit-cube-link" placeholder="Pega aquí el link de 'Share Location' de tu app Cube Tracker" class="w-full bg-cyan-50/50 border border-cyan-300 rounded-xl px-3.5 py-2.5 text-sm text-slate-900" />
+          <p class="text-[11px] text-slate-500 mt-1">
+            💡 En la app <strong>Cube Tracker</strong> de tu celular, abre tu GPS ➔ toca <strong>Share (Compartir)</strong> ➔ copia el link y pégalo aquí para abrir el rastreo satelital directo con 1 toque.
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">📍 ¿Por qué punto de la ruta LA ➔ GDL va ahorita?</label>
+          <select id="edit-cube-checkpoint" onchange="applyCheckpointPreset()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900">
+            <option value="">-- Elegir punto en la carretera (o usar GPS del celular) --</option>
+            <option value="34.0522,-118.2437,Saliendo de Bodega en Los Ángeles (LA)">🇺🇸 Los Ángeles, CA (Bodega Salida)</option>
+            <option value="32.5519,-116.9385,Cruce Fronterizo Tijuana / Otay Mesa">🛂 Frontera Tijuana / Otay Mesa</option>
+            <option value="32.4600,-114.7700,San Luis Río Colorado, Sonora (Carretera 2)">🌵 San Luis Río Colorado, SON</option>
+            <option value="29.0729,-110.9559,Pasando Hermosillo, Sonora (Autopista 15D)">🛣️ Hermosillo, Sonora (15D)</option>
+            <option value="24.8091,-107.3940,Pasando Culiacán, Sinaloa (Autopista 15D)">🛣️ Culiacán, Sinaloa (15D)</option>
+            <option value="23.2494,-106.4111,Pasando Mazatlán, Sinaloa (Autopista 15D)">🌴 Mazatlán, Sinaloa (15D)</option>
+            <option value="21.5042,-104.8946,Pasando Tepic, Nayarit (Autopista 15D)">⛰️ Tepic, Nayarit (15D)</option>
+            <option value="20.6597,-103.3496,Llegando a Guadalajara, Jalisco (GDL)">🇲🇽 Guadalajara, Jalisco (Destino GDL)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">📝 Descripción del Lugar Actual</label>
+          <input id="edit-cube-label" required placeholder="Ej. Autopista 15D pasando Mazatlán rumbo a GDL" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Latitud GPS</label>
+            <input id="edit-cube-lat" type="number" step="any" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">Longitud GPS</label>
+            <input id="edit-cube-lng" type="number" step="any" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold" />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-200">
+          <button type="button" onclick="closeCubeGpsModal()" class="px-4 py-2 rounded-xl bg-slate-100 font-bold text-slate-700">Cancelar</button>
+          <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">Guardar Cube GPS</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "transfrontera_luis_chava_la_gdl_clean_v7";
+
+    const DEFAULT_TRAILERS = [];
+
+    let trailers = [];
+    let selectedTrailerId = "";
+    let activeUser = "Luis";
+    let currentTab = "info";
+    let pendingQuickPhotoCategory = "Carga / Cajas";
+    let map = null;
+    let markers = {};
+
+    // =========================================================================
+    // ZERO-KNOWLEDGE AES-256-GCM ENCRYPTION + SUPABASE PRIVATE CLOUD SYNC
+    // =========================================================================
+    const SUPABASE_URL = "https://zhubeuufgxikxcvziewf.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_XTmew_Y_Skoun2mxfiyt6Q_s7Q_1Nm4";
+    const SUPABASE_TABLE = "encrypted_vault";
+
+    let vaultCryptoKey = null;
+    let vaultIdHash = null;
+    let lastCloudUpdatedAt = null;
+    let isSyncing = false;
+
+    const SUPABASE_SETUP_SQL = `create table if not exists public.encrypted_vault (
+  vault_id text primary key,
+  encrypted_payload text not null,
+  updated_at timestamptz default now()
+);
+
+alter table public.encrypted_vault enable row level security;
+
+drop policy if exists "Allow encrypted vault sync" on public.encrypted_vault;
+create policy "Allow encrypted vault sync"
+  on public.encrypted_vault
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);`;
+
+    function selectLockUser(user) {
+      setActiveUser(user);
+      const btnLuis = document.getElementById("lock-btn-luis");
+      const btnChava = document.getElementById("lock-btn-chava");
+      if (user === "Luis") {
+        btnLuis.className = "py-3 px-3 rounded-2xl font-extrabold text-sm border-2 border-emerald-600 bg-emerald-50 text-emerald-900 transition";
+        btnChava.className = "py-3 px-3 rounded-2xl font-extrabold text-sm border-2 border-slate-200 bg-white text-slate-700 transition";
+      } else {
+        btnChava.className = "py-3 px-3 rounded-2xl font-extrabold text-sm border-2 border-emerald-600 bg-emerald-50 text-emerald-900 transition";
+        btnLuis.className = "py-3 px-3 rounded-2xl font-extrabold text-sm border-2 border-slate-200 bg-white text-slate-700 transition";
+      }
+    }
+
+    function togglePassphraseVisibility() {
+      const input = document.getElementById("vault-passphrase-input");
+      const btn = document.getElementById("toggle-pass-btn");
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "Ocultar";
+      } else {
+        input.type = "password";
+        btn.textContent = "Ver";
+      }
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = "";
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    function base64ToBytes(base64) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    async function deriveVaultKeyAndId(passphrase) {
+      const enc = new TextEncoder();
+      const normalized = passphrase.trim();
+
+      // 1. Derive anonymous SHA-256 vault_id so even the row ID reveals nothing
+      const idSeed = enc.encode("transfrontera_vault_id_v1:" + normalized);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", idSeed);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+      const derivedVaultId = "vault_" + hashHex.slice(0, 32);
+
+      // 2. Derive 256-bit AES-GCM key via PBKDF2 (100,000 iterations)
+      const keyMaterial = await crypto.subtle.importKey(
+        "raw",
+        enc.encode(normalized),
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+      );
+      const salt = enc.encode("transfrontera_aes_gcm_salt_v1:" + derivedVaultId);
+      const aesKey = await crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt,
+          iterations: 100000,
+          hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+
+      return { vaultId: derivedVaultId, aesKey };
+    }
+
+    async function encryptTrailersData(dataObj) {
+      const enc = new TextEncoder();
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const plaintext = enc.encode(JSON.stringify(dataObj));
+      const ciphertextBuffer = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        vaultCryptoKey,
+        plaintext
+      );
+      return JSON.stringify({
+        v: 1,
+        alg: "AES-256-GCM",
+        iv: bytesToBase64(iv),
+        cipher: bytesToBase64(new Uint8Array(ciphertextBuffer))
+      });
+    }
+
+    async function decryptTrailersData(encryptedString) {
+      const parsed = JSON.parse(encryptedString);
+      const iv = base64ToBytes(parsed.iv);
+      const cipherBytes = base64ToBytes(parsed.cipher);
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        vaultCryptoKey,
+        cipherBytes
+      );
+      const dec = new TextDecoder();
+      return JSON.parse(dec.decode(decryptedBuffer));
+    }
+
+    function setSyncBadge(text, styleType) {
+      const badge = document.getElementById("cloud-sync-badge");
+      if (!badge) return;
+      badge.textContent = text;
+      if (styleType === "ok") {
+        badge.className = "text-xs sm:text-sm font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-full flex items-center gap-1.5";
+      } else if (styleType === "warn") {
+        badge.className = "text-xs sm:text-sm font-bold text-amber-900 bg-amber-100 border border-amber-300 px-3 py-1 rounded-full flex items-center gap-1.5";
+      } else {
+        badge.className = "text-xs sm:text-sm font-bold text-blue-800 bg-blue-100 border border-blue-300 px-3 py-1 rounded-full flex items-center gap-1.5";
+      }
+    }
+
+    async function handleUnlockVault(event) {
+      event.preventDefault();
+      const passInput = document.getElementById("vault-passphrase-input");
+      const unlockBtn = document.getElementById("vault-unlock-btn");
+      const errBox = document.getElementById("vault-unlock-error");
+      const passphrase = passInput.value.trim();
+      if (!passphrase) return;
+
+      errBox.classList.add("hidden");
+      unlockBtn.disabled = true;
+      unlockBtn.innerHTML = "<span>🔐 Descifrando y conectando con Supabase...</span>";
+
+      try {
+        const derived = await deriveVaultKeyAndId(passphrase);
+        vaultCryptoKey = derived.aesKey;
+        vaultIdHash = derived.vaultId;
+
+        // Remove any unencrypted legacy localStorage item for 100% privacy
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+
+        // Try pulling encrypted state from Supabase
+        const pulled = await syncFromCloudNow(true);
+        if (!pulled) {
+          // Check if we have an encrypted backup in localStorage for this vaultId
+          const localEncrypted = localStorage.getItem("enc_" + vaultIdHash);
+          if (localEncrypted) {
+            trailers = await decryptTrailersData(localEncrypted);
+          } else {
+            trailers = JSON.parse(JSON.stringify(DEFAULT_TRAILERS));
+            await saveState();
+          }
+        }
+
+        if (trailers.length > 0 && !trailers.find(t => t.id === selectedTrailerId)) {
+          selectedTrailerId = trailers[0].id;
+        }
+
+        document.getElementById("privacy-lock-modal").classList.add("hidden");
+        document.getElementById("privacy-lock-modal").classList.remove("flex");
+        passInput.value = "";
+        renderAll();
+      } catch (err) {
+        errBox.textContent = "No se pudo desbloquear con esa clave: " + (err.message || "Error");
+        errBox.classList.remove("hidden");
+      } finally {
+        unlockBtn.disabled = false;
+        unlockBtn.innerHTML = "<span>🔓 Desbloquear Bóveda Privada</span>";
+      }
+    }
+
+    function lockVault() {
+      vaultCryptoKey = null;
+      vaultIdHash = null;
+      const modal = document.getElementById("privacy-lock-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeLockPreview() {
+      const modal = document.getElementById("privacy-lock-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function copySupabaseSql() {
+      navigator.clipboard.writeText(SUPABASE_SETUP_SQL).then(() => {
+        const btn = document.getElementById("copy-sql-btn");
+        btn.textContent = "✅ ¡SQL Copiado! Pégalo en Supabase y dale Run";
+        window.open("https://supabase.com/dashboard/project/zhubeuufgxikxcvziewf/sql/new", "_blank");
+      });
+    }
+
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        trailers = saved ? JSON.parse(saved) : [];
+        if (trailers.length > 0 && !selectedTrailerId) {
+          selectedTrailerId = trailers[0].id;
+        }
+      } catch (e) {
+        trailers = [];
+      }
+    }
+
+    async function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(trailers));
+      } catch (e) {}
+      if (!vaultCryptoKey || !vaultIdHash) return;
+      try {
+        setSyncBadge("🔐 Cifrando y guardando en la nube...", "sync");
+        const encryptedPayload = await encryptTrailersData(trailers);
+
+        // Save encrypted ciphertext locally as offline cache (zero plaintext on disk)
+        try {
+          localStorage.setItem("enc_" + vaultIdHash, encryptedPayload);
+        } catch (e) {}
+
+        const nowIso = new Date().toISOString();
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=representation"
+          },
+          body: JSON.stringify({
+            vault_id: vaultIdHash,
+            encrypted_payload: encryptedPayload,
+            updated_at: nowIso
+          })
+        });
+
+        if (res.status === 404) {
+          document.getElementById("supabase-setup-banner").classList.remove("hidden");
+          setSyncBadge("⚠️ Falta activar tabla en Supabase (Cifrado Local Activo)", "warn");
+          return;
+        }
+
+        if (res.ok) {
+          document.getElementById("supabase-setup-banner").classList.add("hidden");
+          lastCloudUpdatedAt = nowIso;
+          setSyncBadge("🔒 Cifrado AES-256 · Guardado en Supabase", "ok");
+        } else {
+          setSyncBadge("⚠️ Guardado cifrado en dispositivo", "warn");
+        }
+      } catch (e) {
+        setSyncBadge("⚠️ Sin internet · Cifrado en dispositivo", "warn");
+      }
+    }
+
+    async function syncFromCloudNow(isInitialUnlock = false) {
+      if (!vaultCryptoKey || !vaultIdHash || isSyncing) return false;
+      isSyncing = true;
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?vault_id=eq.${encodeURIComponent(vaultIdHash)}&select=encrypted_payload,updated_at`,
+          {
+            method: "GET",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`
+            }
+          }
+        );
+
+        if (res.status === 404) {
+          document.getElementById("supabase-setup-banner").classList.remove("hidden");
+          setSyncBadge("⚠️ Falta activar tabla en Supabase", "warn");
+          return false;
+        }
+
+        if (!res.ok) return false;
+        document.getElementById("supabase-setup-banner").classList.add("hidden");
+
+        const rows = await res.json();
+        if (rows && rows.length > 0 && rows[0].encrypted_payload) {
+          const remoteUpdated = rows[0].updated_at;
+          if (isInitialUnlock || !lastCloudUpdatedAt || remoteUpdated !== lastCloudUpdatedAt) {
+            const decrypted = await decryptTrailersData(rows[0].encrypted_payload);
+            if (Array.isArray(decrypted) && decrypted.length > 0) {
+              trailers = decrypted;
+              lastCloudUpdatedAt = remoteUpdated;
+              try {
+                localStorage.setItem("enc_" + vaultIdHash, rows[0].encrypted_payload);
+              } catch (e) {}
+              renderAll();
+            }
+          }
+          setSyncBadge("🔒 Cifrado AES-256 · Sincronizado en Vivo", "ok");
+          return true;
+        } else if (isInitialUnlock) {
+          // Table exists, but no row yet for this secret key -> push initial encrypted state
+          trailers = JSON.parse(JSON.stringify(DEFAULT_TRAILERS));
+          await saveState();
+          return true;
+        }
+        return false;
+      } catch (e) {
+        return false;
+      } finally {
+        isSyncing = false;
+      }
+    }
+
+    // Poll Supabase every 5 seconds for live updates between Luis and Chava
+    setInterval(() => {
+      if (vaultCryptoKey && vaultIdHash) {
+        syncFromCloudNow(false);
+      }
+    }, 5000);
+
+    function getSelectedTrailer() {
+      return trailers.find(t => t.id === selectedTrailerId) || trailers[0];
+    }
+
+    // Switch Active User (Luis vs Chava)
+    function setActiveUser(user) {
+      activeUser = user;
+      const btnLuis = document.getElementById("btn-user-luis");
+      const btnChava = document.getElementById("btn-user-chava");
+      const senderLabel = document.getElementById("chat-active-sender");
+
+      if (user === "Luis") {
+        btnLuis.className = "px-4 py-2 rounded-xl text-sm font-bold transition bg-emerald-600 text-white shadow-sm";
+        btnChava.className = "px-4 py-2 rounded-xl text-sm font-bold transition text-slate-600 hover:bg-white";
+        senderLabel.textContent = "Luis (Envía en LA)";
+      } else {
+        btnChava.className = "px-4 py-2 rounded-xl text-sm font-bold transition bg-emerald-600 text-white shadow-sm";
+        btnLuis.className = "px-4 py-2 rounded-xl text-sm font-bold transition text-slate-600 hover:bg-white";
+        senderLabel.textContent = "Chava (Recibe en GDL)";
+      }
+    }
+
+    function toggleActiveUser() {
+      setActiveUser(activeUser === "Luis" ? "Chava" : "Luis");
+    }
+
+    // Switch Main Navigation Tabs
+    function switchMainTab(tab) {
+      currentTab = tab;
+      const tabs = ["info", "photos", "gps"];
+      tabs.forEach(t => {
+        const panel = document.getElementById(`tab-panel-${t}`);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        if (t === tab) {
+          panel.classList.remove("hidden");
+          btn.className = "py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition bg-slate-900 text-white shadow";
+        } else {
+          panel.classList.add("hidden");
+          btn.className = "py-3.5 px-4 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition bg-slate-100 text-slate-700 hover:bg-slate-200";
+        }
+      });
+
+      if (tab === "chat") {
+        document.getElementById("chat-column-wrapper").scrollIntoView({ behavior: "smooth" });
+      }
+
+      if (tab === "gps") {
+        setTimeout(() => {
+          if (!map) {
+            initMap();
+          } else {
+            map.invalidateSize();
+            focusTrailerOnMap(selectedTrailerId);
+          }
+        }, 100);
+      }
+    }
+
+    // Step 1: Render Big Easy Trailer Cards
+    function renderTrailerSelectorCards() {
+      const container = document.getElementById("trailer-selector-cards");
+      if (trailers.length === 0) {
+        container.innerHTML = `
+          <div class="md:col-span-3 bg-white border-2 border-dashed border-emerald-400 rounded-3xl p-6 sm:p-8 text-center flex flex-col items-center justify-center gap-3 shadow-xs">
+            <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-3xl">
+              🚛
+            </div>
+            <div>
+              <h3 class="text-lg sm:text-xl font-extrabold text-slate-900">
+                Listo para su primer viaje (LA ➔ GDL)
+              </h3>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
+                Ya quitamos los remolques de ejemplo. Toca el botón de abajo para registrar el primer remolque real de Luis y Chava.
+              </p>
+            </div>
+            <button
+              onclick="openNewTrailerModal()"
+              class="mt-1 px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm sm:text-base shadow-md shadow-emerald-600/20 transition flex items-center gap-2"
+            >
+              <span>+ Agregar Primer Remolque</span>
+            </button>
+          </div>
+        `;
+        return;
+      }
+      container.innerHTML = trailers.map(t => {
+        const isSelected = t.id === selectedTrailerId;
+        const badgeStyle =
+          t.statusStage === "crossed"
+            ? "bg-blue-100 text-blue-800 border-blue-200"
+            : t.statusStage === "border"
+            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+            : "bg-amber-100 text-amber-800 border-amber-200";
+
+        return `
+          <button
+            onclick="selectTrailer('${t.id}')"
+            class="w-full text-left p-4 sm:p-5 rounded-3xl border-2 transition flex flex-col justify-between gap-3 ${
+              isSelected
+                ? "bg-white border-emerald-600 ring-4 ring-emerald-500/15 shadow-md"
+                : "bg-white/80 border-slate-200 hover:border-slate-300 hover:bg-white"
+            }"
+          >
+            <div class="flex items-start justify-between gap-2 w-full">
+              <div class="flex items-center gap-2.5">
+                <div class="w-11 h-11 rounded-2xl ${isSelected ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"} flex items-center justify-center font-extrabold text-base">
+                  🚛
+                </div>
+                <div>
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Remolque / Caja</span>
+                  <span class="text-xl font-extrabold text-slate-900">#${t.trailerNumber}</span>
+                </div>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-xs font-extrabold border ${badgeStyle}">
+                ${t.status}
+              </span>
+            </div>
+
+            <div class="bg-slate-50 rounded-2xl p-3 border border-slate-100 w-full space-y-1 text-xs sm:text-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500 font-medium">🏢 Embarcador:</span>
+                <span class="font-bold text-slate-800 truncate max-w-[180px]">${t.shipperName}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500 font-medium">👥 Personas en el envío:</span>
+                <span class="font-extrabold text-blue-700">${Number(t.peopleCount || 1).toLocaleString()} Personas</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500 font-medium">📦 Cantidad de Cajas:</span>
+                <span class="font-extrabold text-emerald-700">${Number(t.boxCount).toLocaleString()} Cajas</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500 font-medium">🇺🇸/🇲🇽 Placas:</span>
+                <span class="font-mono font-bold text-slate-700 text-xs">${t.frontPlateUS.split("·")[1] || t.frontPlateUS} / ${t.frontPlateMX.split("·")[1] || t.frontPlateMX}</span>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join("");
+    }
+
+    // Render Banner + 1-Tap Status Changer
+    function renderSummaryBanner() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        document.getElementById("photo-count-pill").textContent = "0";
+        document.getElementById("photos-trailer-title").textContent = "Sin remolque";
+        document.getElementById("chat-header-trailer").textContent = "General";
+        document.getElementById("trailer-summary-banner").innerHTML = `
+          <div class="text-center py-6">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full">
+              Sistema Listo en Blanco
+            </span>
+            <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 mt-2">
+              Agrega un Remolque para ver y editar su información
+            </h2>
+            <p class="text-sm text-slate-500 mt-1">
+              Usa el botón azul <strong>"+ Nuevo Remolque"</strong> arriba a la derecha para registrar placas, embarcador, personas y cajas.
+            </p>
+          </div>
+        `;
+        return;
+      }
+      document.getElementById("photo-count-pill").textContent = t.photos.length;
+      document.getElementById("photos-trailer-title").textContent = `#${t.trailerNumber}`;
+      document.getElementById("chat-header-trailer").textContent = `#${t.trailerNumber}`;
+
+      const currentLink = (t.cubeGps && t.cubeGps.shareLink) ? t.cubeGps.shareLink : "";
+
+      document.getElementById("trailer-summary-banner").innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <span class="text-xs font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md">
+              Remolque Seleccionado
+            </span>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
+              🚛 Caja #${t.trailerNumber} — ${t.shipperName}
+            </h2>
+            <p class="text-sm font-medium text-slate-500 mt-0.5">
+              📍 <strong>Ruta:</strong> ${t.route}
+            </p>
+          </div>
+          <button
+            onclick="switchMainTab('gps')"
+            class="px-4 py-2.5 rounded-2xl bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border border-cyan-200 font-extrabold text-sm flex items-center gap-2 transition"
+          >
+            <span>🛰️ Ver en Mapa Cube GPS (${t.cubeGps.speedMph} mph)</span>
+          </button>
+        </div>
+
+        <!-- DIRECT CUBE TRACKER APP LINK BOX (RIGHT ON MAIN SCREEN) -->
+        <div class="mt-4 bg-cyan-50/80 border-2 border-cyan-200 rounded-2xl p-3.5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
+              🛰️ Link en Vivo de la App "Cube Tracker" (Remolque #${t.trailerNumber})
+            </span>
+            ${currentLink ? `
+              <a
+                href="${currentLink}"
+                target="_blank"
+                class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition"
+              >
+                <span>🛰️ Abrir Ubicación en Cube Tracker ↗</span>
+              </a>
+            ` : `<span class="text-[11px] font-bold text-cyan-700">Pega el link "Share" de tu app Cube Tracker abajo</span>`}
+          </div>
+          <form onsubmit="handleQuickSaveCubeLink(event, 'banner-cube-link-input')" class="flex flex-col sm:flex-row gap-2">
+            <input
+              id="banner-cube-link-input"
+              type="url"
+              required
+              value="${currentLink}"
+              placeholder="Pega aquí el link de tu app Cube Tracker (ej. https://...)"
+              class="flex-1 bg-white border border-cyan-300 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-600"
+            />
+            <button
+              type="submit"
+              class="px-4 py-2 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-extrabold text-xs sm:text-sm shrink-0 transition"
+            >
+              ${currentLink ? "✏️ Actualizar Link" : "🔗 Vincular Link Cube GPS"}
+            </button>
+          </form>
+        </div>
+
+        <!-- Easy 3-Button Status Switcher -->
+        <div class="mt-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            ¿En qué paso va este camión en la ruta LA ➔ GDL? (Toca un botón):
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <button
+              onclick="updateTrailerStage('loading', 'Cargando en Los Ángeles (LA)')"
+              class="p-3 rounded-2xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                t.statusStage === "loading"
+                  ? "bg-amber-500 text-white border-amber-600 shadow-sm"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              }"
+            >
+              <span>🟡 1. Cargando en LA</span>
+            </button>
+
+            <button
+              onclick="updateTrailerStage('border', 'En Cruce / Ruta hacia GDL')"
+              class="p-3 rounded-2xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                t.statusStage === "border"
+                  ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              }"
+            >
+              <span>🟢 2. En Ruta (LA ➔ GDL)</span>
+            </button>
+
+            <button
+              onclick="updateTrailerStage('crossed', 'En Guadalajara (GDL)')"
+              class="p-3 rounded-2xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition ${
+                t.statusStage === "crossed"
+                  ? "bg-blue-600 text-white border-blue-700 shadow-sm"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              }"
+            >
+              <span>🇲🇽 3. Llegó a Guadalajara (GDL)</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateTrailerStage(stage, label) {
+      const t = getSelectedTrailer();
+      t.statusStage = stage;
+      t.status = label;
+      t.messages.push({
+        sender: activeUser,
+        time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        text: `🔔 Actualicé el estado del Remolque #${t.trailerNumber} a: "${label}"`
+      });
+      saveState();
+      renderAll();
+    }
+
+    // Render Visual License Plates (Looks like real easy-to-read plates)
+    function renderVisualPlates() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        document.getElementById("visual-plates-grid").innerHTML = `
+          <div class="sm:col-span-3 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-sm font-semibold text-slate-500">
+            🏷️ Las 3 placas (Remolque, Delantera Americana 🇺🇸 y Delantera Mexicana 🇲🇽) aparecerán aquí al agregar un remolque.
+          </div>
+        `;
+        return;
+      }
+      document.getElementById("visual-plates-grid").innerHTML = `
+        <!-- Plate 1: Trailer Plate -->
+        <div class="license-plate bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 text-center flex flex-col justify-between">
+          <div class="flex items-center justify-between text-[11px] font-extrabold text-amber-800 uppercase">
+            <span>🏷️ PLACA DEL REMOLQUE</span>
+            <span>CAJA #${t.trailerNumber}</span>
+          </div>
+          <div class="my-3 py-2 bg-white rounded-xl border border-amber-200">
+            <span class="font-mono text-xl sm:text-2xl font-black tracking-wider text-slate-900">${t.trailerPlate}</span>
+          </div>
+          <span class="text-xs font-semibold text-amber-900">Sello: ${t.sealNumber}</span>
+        </div>
+
+        <!-- Plate 2: US Front Plate -->
+        <div class="license-plate bg-blue-50 border-2 border-blue-500 rounded-2xl p-4 text-center flex flex-col justify-between">
+          <div class="flex items-center justify-between text-[11px] font-extrabold text-blue-900 uppercase">
+            <span>🇺🇸 PLACA AMERICANA</span>
+            <span>FRENTE CAMIÓN</span>
+          </div>
+          <div class="my-3 py-2 bg-white rounded-xl border border-blue-200">
+            <span class="font-mono text-xl sm:text-2xl font-black tracking-wider text-blue-950">${t.frontPlateUS}</span>
+          </div>
+          <span class="text-xs font-semibold text-blue-800">Para cruzar a Estados Unidos</span>
+        </div>
+
+        <!-- Plate 3: MX Front Plate -->
+        <div class="license-plate bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-4 text-center flex flex-col justify-between">
+          <div class="flex items-center justify-between text-[11px] font-extrabold text-emerald-900 uppercase">
+            <span>🇲🇽 PLACA MEXICANA</span>
+            <span>FRENTE CAMIÓN</span>
+          </div>
+          <div class="my-3 py-2 bg-white rounded-xl border border-emerald-200">
+            <span class="font-mono text-xl sm:text-2xl font-black tracking-wider text-emerald-950">${t.frontPlateMX}</span>
+          </div>
+          <span class="text-xs font-semibold text-emerald-800">Autotransporte Federal MX</span>
+        </div>
+      `;
+    }
+
+    // Render Shipper, People Count & Box Counter + Add Person to Shipment
+    function renderShipperAndBoxes() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        document.getElementById("shipper-boxes-card").innerHTML = `
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-sm font-semibold text-slate-500">
+            👥📦 El conteo de Personas, Cajas y lista de clientes del envío aparecerán aquí al agregar un remolque.
+          </div>
+        `;
+        return;
+      }
+      if (!t.peopleCount) t.peopleCount = (t.peopleList && t.peopleList.length) || 1;
+      if (!t.peopleList) t.peopleList = [];
+
+      document.getElementById("shipper-boxes-card").innerHTML = `
+        <div class="space-y-5">
+          <!-- Shipper Info Header -->
+          <div class="pb-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span class="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">
+                🏢 Embarcador Principal (Shipper LA ➔ GDL)
+              </span>
+              <h3 class="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">${t.shipperName}</h3>
+              <p class="text-sm sm:text-base text-slate-600 font-medium mt-0.5">
+                <strong>🇺🇸 Envía en LA:</strong> Luis · <strong>🇲🇽 Recibe en GDL:</strong> Chava
+              </p>
+              <p class="text-sm font-bold text-slate-800 mt-1 flex items-center gap-2 flex-wrap">
+                <span>🪪 <strong>Chofer de este viaje:</strong> ${t.driverName || "Por asignar"}</span>
+                <button onclick="promptEditDriver()" class="text-xs font-bold text-blue-600 hover:underline bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                  ✏️ Cambiar Chofer
+                </button>
+              </p>
+            </div>
+          </div>
+
+          <!-- TWO BIG COUNTERS SIDE BY SIDE: PEOPLE ON SHIPMENT & TOTAL BOXES -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Counter 1: Amount of People on this Shipment -->
+            <div class="bg-blue-50 border-2 border-blue-200 rounded-3xl p-4 text-center flex flex-col justify-between">
+              <span class="text-xs font-extrabold uppercase text-blue-800 block">
+                👥 Cantidad de Personas en este Envío
+              </span>
+              <div class="text-3xl sm:text-4xl font-black text-blue-950 my-2">
+                ${Number(t.peopleCount).toLocaleString()} <span class="text-lg font-bold text-blue-700">personas</span>
+              </div>
+              <div class="flex items-center justify-center gap-2 mt-1">
+                <button onclick="adjustPeople(-1)" class="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-blue-300 font-extrabold text-sm text-slate-800 shadow-2xs">
+                  -1
+                </button>
+                <button onclick="adjustPeople(1)" class="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-blue-300 font-extrabold text-sm text-slate-800 shadow-2xs">
+                  +1
+                </button>
+                <button onclick="promptExactPeople()" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs">
+                  Escribir cantidad
+                </button>
+              </div>
+            </div>
+
+            <!-- Counter 2: Total Boxes on this Shipment -->
+            <div class="bg-emerald-50 border-2 border-emerald-200 rounded-3xl p-4 text-center flex flex-col justify-between">
+              <span class="text-xs font-extrabold uppercase text-emerald-800 block">
+                📦 Cantidad Total de Cajas
+              </span>
+              <div class="text-3xl sm:text-4xl font-black text-emerald-950 my-2">
+                ${Number(t.boxCount).toLocaleString()} <span class="text-lg font-bold text-emerald-700">cajas</span>
+              </div>
+              <div class="flex items-center justify-center gap-2 mt-1">
+                <button onclick="adjustBoxes(-10)" class="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-emerald-300 font-extrabold text-sm text-slate-800 shadow-2xs">
+                  -10
+                </button>
+                <button onclick="adjustBoxes(10)" class="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-emerald-300 font-extrabold text-sm text-slate-800 shadow-2xs">
+                  +10
+                </button>
+                <button onclick="promptExactBoxes()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs">
+                  Escribir número
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ADD A PERSON / CLIENT TO THIS SHIPMENT + LIST OF PEOPLE -->
+          <div class="pt-4 border-t border-slate-100">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div>
+                <h4 class="text-base font-extrabold text-slate-900">
+                  👥 Personas / Clientes Registrados en este Envío (#${t.trailerNumber})
+                </h4>
+                <p class="text-xs text-slate-500">Agrega aquí el nombre de cada persona que manda cajas en este remolque de LA a GDL</p>
+              </div>
+            </div>
+
+            <!-- Simple Inline Form to Add a Person to this Shipment -->
+            <form onsubmit="handleAddPersonToShipment(event)" class="bg-slate-50 border border-slate-200 rounded-2xl p-3 mb-3 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+              <input
+                id="person-name-input"
+                type="text"
+                required
+                placeholder="Nombre de la persona (ej. Familia García)"
+                class="sm:col-span-5 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 placeholder-slate-400"
+              />
+              <input
+                id="person-boxes-input"
+                type="number"
+                required
+                placeholder="¿Cuántas cajas?"
+                class="sm:col-span-3 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 placeholder-slate-400"
+              />
+              <input
+                id="person-receiver-input"
+                type="text"
+                placeholder="Quién recibe en GDL (opcional)"
+                class="sm:col-span-4 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
+              />
+              <button
+                type="submit"
+                class="sm:col-span-12 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold text-sm py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition"
+              >
+                <span>+ Agregar Persona a este Envío</span>
+              </button>
+            </form>
+
+            <!-- List of People on this Shipment -->
+            <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+              ${t.peopleList.map((p, idx) => `
+                <div class="bg-white border border-slate-200 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs sm:text-sm">
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-7 h-7 rounded-full bg-blue-100 text-blue-800 font-extrabold flex items-center justify-center text-xs shrink-0">
+                      👤
+                    </span>
+                    <div>
+                      <span class="font-extrabold text-slate-900 block">${p.name}</span>
+                      <span class="text-xs text-slate-500">${p.receiver || "Entrega en Guadalajara (GDL)"}</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs">
+                      📦 ${Number(p.boxes).toLocaleString()} cajas
+                    </span>
+                    <button onclick="removePersonFromShipment(${idx})" title="Quitar" class="text-slate-400 hover:text-red-600 font-bold px-1">✕</button>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function adjustPeople(delta) {
+      const t = getSelectedTrailer();
+      t.peopleCount = Math.max(1, Number(t.peopleCount || 1) + delta);
+      saveState();
+      renderAll();
+    }
+
+    function promptEditDriver() {
+      const t = getSelectedTrailer();
+      if (!t) return;
+      const val = prompt("Escribe el nombre y teléfono del chofer de este viaje:", t.driverName || "");
+      if (val !== null && val.trim()) {
+        t.driverName = val.trim();
+        t.messages.push({
+          sender: activeUser,
+          time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+          text: `🪪 Actualicé el chofer del remolque #${t.trailerNumber}: ${t.driverName}`
+        });
+        saveState();
+        renderAll();
+      }
+    }
+
+    function promptExactPeople() {
+      const t = getSelectedTrailer();
+      const val = prompt("Escribe cuántas personas van en este envío:", t.peopleCount || 1);
+      if (val !== null && !isNaN(Number(val)) && Number(val) >= 0) {
+        t.peopleCount = Number(val);
+        saveState();
+        renderAll();
+      }
+    }
+
+    function handleAddPersonToShipment(event) {
+      event.preventDefault();
+      const t = getSelectedTrailer();
+      const name = document.getElementById("person-name-input").value.trim();
+      const boxes = Number(document.getElementById("person-boxes-input").value) || 0;
+      const receiver = document.getElementById("person-receiver-input").value.trim() || "Entrega en Guadalajara (GDL)";
+      if (!name) return;
+
+      if (!t.peopleList) t.peopleList = [];
+      t.peopleList.unshift({ name, boxes, receiver });
+      t.peopleCount = Number(t.peopleCount || 0) + 1;
+      t.boxCount = Number(t.boxCount || 0) + boxes;
+
+      t.messages.push({
+        sender: activeUser,
+        time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        text: `👤 Agregué a "${name}" con ${boxes} cajas (${receiver}) al remolque #${t.trailerNumber}. Ahora van ${t.peopleCount} personas y ${t.boxCount.toLocaleString()} cajas.`
+      });
+
+      saveState();
+      renderAll();
+    }
+
+    function removePersonFromShipment(idx) {
+      const t = getSelectedTrailer();
+      if (!t.peopleList || !t.peopleList[idx]) return;
+      const removed = t.peopleList.splice(idx, 1)[0];
+      t.peopleCount = Math.max(1, Number(t.peopleCount || 1) - 1);
+      t.boxCount = Math.max(0, Number(t.boxCount || 0) - Number(removed.boxes || 0));
+      saveState();
+      renderAll();
+    }
+
+    function adjustBoxes(delta) {
+      const t = getSelectedTrailer();
+      t.boxCount = Math.max(0, Number(t.boxCount) + delta);
+      saveState();
+      renderAll();
+    }
+
+    function promptExactBoxes() {
+      const t = getSelectedTrailer();
+      const val = prompt("Escribe la cantidad exacta de cajas:", t.boxCount);
+      if (val !== null && !isNaN(Number(val)) && Number(val) >= 0) {
+        t.boxCount = Number(val);
+        saveState();
+        renderAll();
+      }
+    }
+
+    // Render Big Friendly Checklist (Revisión Rápida without tire checking)
+    function renderTiresAndChecklist() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        document.getElementById("tires-and-checks-card").innerHTML = `
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-sm font-semibold text-slate-500">
+            ✅ La lista de revisión rápida aparecerá aquí al seleccionar un remolque.
+          </div>
+        `;
+        return;
+      }
+      const doneCount = t.checks.filter(c => c.done).length;
+
+      document.getElementById("tires-and-checks-card").innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-100 mb-4">
+          <div>
+            <h3 class="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2">
+              ✅ Lista de Revisión Rápida (${doneCount} de ${t.checks.length} listos)
+            </h3>
+            <p class="text-sm text-slate-500">
+              Toca cualquier renglón para palomearlo antes de salir de Los Ángeles (LA) rumbo a Guadalajara (GDL)
+            </p>
+          </div>
+          <span class="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs sm:text-sm">
+            ${doneCount}/${t.checks.length} Completados
+          </span>
+        </div>
+
+        <div class="space-y-2.5">
+          ${t.checks.map((chk, idx) => `
+            <div
+              onclick="toggleCheckItem(${idx})"
+              class="cursor-pointer p-3.5 rounded-2xl border-2 flex items-center gap-3.5 transition select-none ${
+                chk.done
+                  ? "bg-emerald-50/70 border-emerald-400 text-slate-900"
+                  : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+              }"
+            >
+              <div class="w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 ${
+                chk.done ? "bg-emerald-600 text-white" : "bg-white border-2 border-slate-300 text-transparent"
+              }">
+                ✓
+              </div>
+              <span class="text-sm sm:text-base font-bold ${chk.done ? "text-slate-900" : "text-slate-600"}">
+                ${chk.label}
+              </span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function editTireDepth(field, label) {
+      const t = getSelectedTrailer();
+      const val = prompt(`Nueva medida para ${label} (ej. 14/32"):`, t.tireTreadUS[field]);
+      if (val && val.trim()) {
+        t.tireTreadUS[field] = val.trim();
+        saveState();
+        renderAll();
+      }
+    }
+
+    function toggleCheckItem(idx) {
+      const t = getSelectedTrailer();
+      t.checks[idx].done = !t.checks[idx].done;
+      saveState();
+      renderTiresAndChecklist();
+    }
+
+    // Render Friendly Photos Tab
+    function getFriendlyPhotoGraphic(photo, t) {
+      if (photo.dataUrl) {
+        return `<img src="${photo.dataUrl}" alt="${photo.title}" class="w-full h-48 object-cover rounded-2xl border border-slate-200" />`;
+      }
+      if (photo.svgType === "front-plates") {
+        return `
+          <div class="w-full h-48 rounded-2xl bg-slate-900 p-4 flex flex-col justify-between text-white">
+            <span class="text-xs font-bold text-slate-300">📸 EVIDENCIA DE PLACAS DELANTERAS</span>
+            <div class="grid grid-cols-2 gap-3 my-auto">
+              <div class="bg-blue-900 border-2 border-blue-400 rounded-xl p-2.5 text-center">
+                <span class="text-[10px] font-bold text-blue-200 block">🇺🇸 AMERICANA</span>
+                <span class="font-mono text-sm font-black">${t.frontPlateUS}</span>
+              </div>
+              <div class="bg-emerald-900 border-2 border-emerald-400 rounded-xl p-2.5 text-center">
+                <span class="text-[10px] font-bold text-emerald-200 block">🇲🇽 MEXICANA</span>
+                <span class="font-mono text-sm font-black">${t.frontPlateMX}</span>
+              </div>
+            </div>
+            <span class="text-xs text-emerald-400 font-bold text-center">✅ Verificadas al frente del camión</span>
+          </div>
+        `;
+      }
+      if (photo.svgType === "tire-tread") {
+        return `
+          <div class="w-full h-48 rounded-2xl bg-emerald-950 p-4 flex flex-col justify-between text-white">
+            <span class="text-xs font-bold text-emerald-300">🛞 MEDIDOR DE LLANTAS EE. UU.</span>
+            <div class="my-auto flex items-center justify-around">
+              <div class="text-center">
+                <span class="text-3xl font-black text-emerald-400">${t.tireTreadUS.steerLeft}</span>
+                <span class="block text-xs text-emerald-100">Delanteras</span>
+              </div>
+              <div class="text-center">
+                <span class="text-3xl font-black text-cyan-400">${t.tireTreadUS.trailerAxles}</span>
+                <span class="block text-xs text-cyan-100">Remolque</span>
+              </div>
+            </div>
+            <span class="text-xs text-emerald-300 font-bold text-center">✅ Pasa inspección DOT Estados Unidos</span>
+          </div>
+        `;
+      }
+      if (photo.svgType === "boxes-cargo") {
+        return `
+          <div class="w-full h-48 rounded-2xl bg-amber-950 p-4 flex flex-col justify-between text-white">
+            <span class="text-xs font-bold text-amber-300">📦 CAJAS CARGADAS ADENTRO</span>
+            <div class="my-auto text-center">
+              <span class="text-4xl font-black text-amber-300">${Number(t.boxCount).toLocaleString()} Cajas</span>
+              <span class="block text-sm text-amber-100 mt-1">${t.shipperName}</span>
+            </div>
+            <span class="text-xs text-amber-200 font-bold text-center">✅ Conteo completo (${t.palletCount} tarimas)</span>
+          </div>
+        `;
+      }
+      return `
+        <div class="w-full h-48 rounded-2xl bg-slate-800 p-4 flex flex-col justify-between text-white">
+          <span class="text-xs font-bold text-amber-300">🏷️ PLACA TRASERA DEL REMOLQUE</span>
+          <div class="my-auto text-center">
+            <div class="inline-block bg-amber-100 text-slate-900 border-2 border-amber-400 rounded-xl px-5 py-2 font-mono text-xl font-black">
+              ${t.trailerPlate}
+            </div>
+          </div>
+          <span class="text-xs text-slate-300 font-bold text-center">🔒 Sello: ${t.sealNumber}</span>
+        </div>
+      `;
+    }
+
+    function renderPhotos() {
+      const t = getSelectedTrailer();
+      const grid = document.getElementById("friendly-photos-grid");
+      if (!t || !t.photos || t.photos.length === 0) {
+        grid.innerHTML = `
+          <div class="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center text-sm font-semibold text-slate-500">
+            📸 Aún no hay fotos subidas en este remolque. Usa los botones de arriba para subir fotos.
+          </div>
+        `;
+        return;
+      }
+      grid.innerHTML = t.photos.map(p => `
+        <div class="bg-slate-50 border border-slate-200 rounded-3xl p-3.5 flex flex-col justify-between shadow-2xs">
+          <div>
+            ${getFriendlyPhotoGraphic(p, t)}
+            <div class="flex items-center justify-between mt-3">
+              <span class="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-xs font-extrabold text-slate-700">
+                ${p.category}
+              </span>
+              <span class="text-xs text-slate-500 font-medium">${p.time}</span>
+            </div>
+            <h4 class="text-base font-extrabold text-slate-900 mt-1.5">${p.title}</h4>
+          </div>
+          <p class="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-200/80">
+            Subida por: <strong class="text-slate-800">${p.author}</strong>
+          </p>
+        </div>
+      `).join("");
+    }
+
+    function triggerQuickPhoto(categoryLabel) {
+      pendingQuickPhotoCategory = categoryLabel;
+      document.getElementById("quick-photo-input").click();
+    }
+
+    function handleQuickPhotoSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const t = getSelectedTrailer();
+        t.photos.unshift({
+          title: pendingQuickPhotoCategory,
+          category: pendingQuickPhotoCategory,
+          author: activeUser,
+          time: "Justo ahora",
+          dataUrl: e.target.result
+        });
+        t.messages.push({
+          sender: activeUser,
+          time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+          text: `📸 Subí una foto nueva de: ${pendingQuickPhotoCategory} en el remolque #${t.trailerNumber}.`
+        });
+        saveState();
+        renderAll();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Render Chat
+    function renderChat() {
+      const t = getSelectedTrailer();
+      const container = document.getElementById("chat-messages");
+      if (!t || !t.messages || t.messages.length === 0) {
+        container.innerHTML = `
+          <div class="my-auto text-center p-6 text-xs sm:text-sm font-semibold text-slate-400">
+            💬 Agrega o selecciona un remolque para iniciar la plática entre Luis y Chava.
+          </div>
+        `;
+        return;
+      }
+      container.innerHTML = t.messages.map(m => {
+        const isLuis = m.sender === "Luis";
+        return `
+          <div class="flex flex-col ${isLuis ? "items-end" : "items-start"}">
+            <span class="text-xs font-extrabold text-slate-600 mb-1 px-1">
+              ${isLuis ? "👋 Luis (Envía en LA)" : "🤠 Chava (Recibe en GDL)"} · <span class="font-normal text-slate-400">${m.time}</span>
+            </span>
+            <div class="max-w-[88%] rounded-2xl px-4 py-3 text-sm sm:text-base font-medium shadow-xs leading-snug ${
+              isLuis
+                ? "bg-emerald-600 text-white rounded-br-none"
+                : "bg-white text-slate-900 border border-slate-200 rounded-bl-none"
+            }">
+              ${m.text}
+            </div>
+          </div>
+        `;
+      }).join("");
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function handleChatSubmit(event) {
+      event.preventDefault();
+      const input = document.getElementById("chat-input");
+      const text = input.value.trim();
+      if (!text) return;
+      sendQuickMessage(text);
+      input.value = "";
+    }
+
+    function sendQuickMessage(text) {
+      const t = getSelectedTrailer();
+      if (!t) {
+        openNewTrailerModal();
+        return;
+      }
+      t.messages.push({
+        sender: activeUser,
+        time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        text: text
+      });
+      saveState();
+      renderChat();
+    }
+
+    // Cube GPS Pro Map & Truck Buttons
+    function handleQuickSaveCubeLink(event, inputId) {
+      event.preventDefault();
+      const t = getSelectedTrailer();
+      if (!t) {
+        openNewTrailerModal();
+        return;
+      }
+      const linkVal = document.getElementById(inputId).value.trim();
+      if (!linkVal) return;
+      t.cubeGps.shareLink = linkVal;
+      t.messages.push({
+        sender: activeUser,
+        time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        text: `🛰️ Vinculé el link en vivo de la app Cube Tracker para el remolque #${t.trailerNumber}: ${linkVal}`
+      });
+      saveState();
+      renderAll();
+    }
+
+    function renderGpsTruckCards() {
+      const container = document.getElementById("gps-truck-cards");
+      const linkBar = document.getElementById("gps-tab-cube-link-bar");
+      if (!container) return;
+      if (trailers.length === 0) {
+        if (linkBar) linkBar.innerHTML = "";
+        container.innerHTML = `
+          <div class="sm:col-span-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center text-xs sm:text-sm font-semibold text-slate-500">
+            🛰️ El mapa de la ruta Los Ángeles (LA) ➔ Guadalajara (GDL) está listo. Agrega un remolque para vincular su link de la app Cube Tracker y ver su marcador GPS en vivo.
+          </div>
+        `;
+        return;
+      }
+      const selected = getSelectedTrailer();
+      if (linkBar && selected) {
+        const curLink = selected.cubeGps.shareLink || "";
+        linkBar.innerHTML = `
+          <div class="bg-cyan-50 border-2 border-cyan-300 rounded-2xl p-3.5 flex flex-col gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs sm:text-sm font-extrabold text-cyan-950">
+                🔗 Link de Rastreo de la App "Cube Tracker" para Caja #${selected.trailerNumber}:
+              </span>
+              ${curLink ? `
+                <a href="${curLink}" target="_blank" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-xs">
+                  🛰️ Abrir Rastreo en Vivo en Cube Tracker ↗
+                </a>
+              ` : ""}
+            </div>
+            <form onsubmit="handleQuickSaveCubeLink(event, 'gps-tab-link-input')" class="flex flex-col sm:flex-row gap-2">
+              <input
+                id="gps-tab-link-input"
+                type="url"
+                required
+                value="${curLink}"
+                placeholder="Pega aquí el link de 'Share Location' de tu app Cube Tracker..."
+                class="flex-1 bg-white border border-cyan-300 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-900"
+              />
+              <button type="submit" class="px-4 py-2 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-extrabold text-xs sm:text-sm shrink-0">
+                ${curLink ? "✏️ Guardar Nuevo Link" : "🔗 Vincular Link Cube Tracker"}
+              </button>
+            </form>
+          </div>
+        `;
+      }
+      container.innerHTML = trailers.map(t => {
+        const isSelected = t.id === selectedTrailerId;
+        const shareBtn = t.cubeGps.shareLink
+          ? `<a href="${t.cubeGps.shareLink}" target="_blank" onclick="event.stopPropagation()" class="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-[11px] font-extrabold">🛰️ Abrir App Cube GPS Oficial ↗</a>`
+          : "";
+        return `
+          <div
+            onclick="selectTrailer('${t.id}'); focusTrailerOnMap('${t.id}');"
+            class="cursor-pointer p-3.5 rounded-2xl border-2 text-left transition ${
+              isSelected
+                ? "bg-cyan-50 border-cyan-600 shadow-xs"
+                : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+            }"
+          >
+            <div class="flex items-center justify-between">
+              <span class="font-extrabold text-base text-slate-900">🚛 #${t.trailerNumber}</span>
+              <span class="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-xs font-extrabold">${t.cubeGps.speedMph} mph</span>
+            </div>
+            <p class="text-xs font-bold text-slate-700 mt-1 truncate">📍 ${t.cubeGps.locationLabel}</p>
+            <p class="text-[11px] text-slate-500 mt-0.5">Cube ID: <strong>${t.cubeGps.deviceId}</strong> · 🔋 ${t.cubeGps.battery}%</p>
+            ${shareBtn}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function initMap() {
+      map = L.map("cube-map", {
+        center: [27.2, -110.5],
+        zoom: 5
+      });
+
+      // Use Esri World Street Map (100% free, no API key required even on local file://)
+      L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+        attribution: "Mapa en Vivo Cube GPS Pro · Ruta Los Ángeles (LA) ➔ Guadalajara (GDL)",
+        maxZoom: 18
+      }).addTo(map);
+
+      // Draw the LA -> GDL Highway Corridor Line on the map
+      const laToGdlRoute = [
+        [34.0522, -118.2437], // Los Ángeles, CA (LA)
+        [32.5519, -116.9385], // Cruce Tijuana / Otay
+        [32.4600, -114.7700], // San Luis Río Colorado / Sonora
+        [29.0729, -110.9559], // Hermosillo, SON
+        [24.8091, -107.3940], // Culiacán, SIN
+        [23.2494, -106.4111], // Mazatlán, SIN
+        [21.5042, -104.8946], // Tepic, NAY
+        [20.6597, -103.3496]  // Guadalajara, JAL (GDL)
+      ];
+
+      L.polyline(laToGdlRoute, {
+        color: "#059669",
+        weight: 5,
+        opacity: 0.75,
+        dashArray: "10, 8"
+      }).addTo(map);
+
+      // Origin & Destination Badges
+      L.marker([34.0522, -118.2437], {
+        icon: L.divIcon({
+          className: "city-badge",
+          html: `<div style="background:#1e3a8a;color:#fff;padding:3px 8px;border-radius:8px;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;">🇺🇸 SALIDA: Los Ángeles (LA)</div>`,
+          iconSize: [165, 26],
+          iconAnchor: [82, 28]
+        })
+      }).addTo(map);
+
+      L.marker([20.6597, -103.3496], {
+        icon: L.divIcon({
+          className: "city-badge",
+          html: `<div style="background:#065f46;color:#fff;padding:3px 8px;border-radius:8px;font-weight:800;font-size:11px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);white-space:nowrap;">🇲🇽 DESTINO: Guadalajara (GDL)</div>`,
+          iconSize: [180, 26],
+          iconAnchor: [90, -8]
+        })
+      }).addTo(map);
+
+      updateMapMarkers();
+    }
+
+    function updateMapMarkers() {
+      if (!map) return;
+      trailers.forEach(t => {
+        const isSelected = t.id === selectedTrailerId;
+        const icon = L.divIcon({
+          className: "friendly-truck-pin",
+          html: `
+            <div style="
+              background:${isSelected ? "#059669" : "#0f172a"};
+              color:#fff;padding:5px 10px;border-radius:999px;
+              font-weight:800;font-size:12px;white-space:nowrap;
+              border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,0.3);
+            ">
+              🚛 #${t.trailerNumber} (${t.cubeGps.speedMph} mph)
+            </div>
+          `,
+          iconSize: [145, 32],
+          iconAnchor: [72, 16]
+        });
+
+        const popup = `
+          <div style="font-family:sans-serif;min-width:200px;">
+            <div style="font-weight:800;font-size:14px;">🚛 Remolque #${t.trailerNumber}</div>
+            <div style="font-size:12px;color:#059669;font-weight:700;margin:4px 0;">📍 ${t.cubeGps.locationLabel}</div>
+            <div style="font-size:12px;"><strong>Embarcador:</strong> ${t.shipperName}</div>
+            <div style="font-size:12px;"><strong>Cajas:</strong> ${Number(t.boxCount).toLocaleString()} cajas</div>
+            <div style="font-size:12px;"><strong>Placa US:</strong> ${t.frontPlateUS}</div>
+            <div style="font-size:12px;"><strong>Placa MX:</strong> ${t.frontPlateMX}</div>
+          </div>
+        `;
+
+        if (markers[t.id]) {
+          markers[t.id].setLatLng([t.cubeGps.lat, t.cubeGps.lng]);
+          markers[t.id].setIcon(icon);
+          markers[t.id].setPopupContent(popup);
+        } else {
+          markers[t.id] = L.marker([t.cubeGps.lat, t.cubeGps.lng], { icon })
+            .addTo(map)
+            .bindPopup(popup);
+        }
+      });
+    }
+
+    function focusTrailerOnMap(trailerId) {
+      const t = trailers.find(x => x.id === trailerId);
+      if (!t || !map) return;
+      map.flyTo([t.cubeGps.lat, t.cubeGps.lng], 11, { duration: 1 });
+      if (markers[t.id]) markers[t.id].openPopup();
+    }
+
+    function centerAllTrailers() {
+      if (!map || trailers.length === 0) return;
+      const bounds = L.latLngBounds(trailers.map(t => [t.cubeGps.lat, t.cubeGps.lng]));
+      map.fitBounds(bounds.pad(0.35));
+    }
+
+    function selectTrailer(id) {
+      selectedTrailerId = id;
+      renderAll();
+    }
+
+    // Cube GPS Pro Setup & Real Phone Geolocation Functions
+    function openCubeGpsModal() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        openNewTrailerModal();
+        return;
+      }
+      document.getElementById("edit-cube-id").value = t.cubeGps.deviceId || "";
+      document.getElementById("edit-cube-link").value = t.cubeGps.shareLink || "";
+      document.getElementById("edit-cube-label").value = t.cubeGps.locationLabel || "";
+      document.getElementById("edit-cube-lat").value = t.cubeGps.lat;
+      document.getElementById("edit-cube-lng").value = t.cubeGps.lng;
+      const modal = document.getElementById("cube-gps-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeCubeGpsModal() {
+      const modal = document.getElementById("cube-gps-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function applyCheckpointPreset() {
+      const val = document.getElementById("edit-cube-checkpoint").value;
+      if (!val) return;
+      const parts = val.split(",");
+      document.getElementById("edit-cube-lat").value = Number(parts[0]);
+      document.getElementById("edit-cube-lng").value = Number(parts[1]);
+      document.getElementById("edit-cube-label").value = parts.slice(2).join(",");
+    }
+
+    function handleSaveCubeGps(event) {
+      event.preventDefault();
+      const t = getSelectedTrailer();
+      if (!t) return;
+      t.cubeGps.deviceId = document.getElementById("edit-cube-id").value.trim();
+      t.cubeGps.shareLink = document.getElementById("edit-cube-link").value.trim();
+      t.cubeGps.locationLabel = document.getElementById("edit-cube-label").value.trim();
+      t.cubeGps.lat = Number(document.getElementById("edit-cube-lat").value) || 34.0522;
+      t.cubeGps.lng = Number(document.getElementById("edit-cube-lng").value) || -118.2437;
+
+      t.messages.push({
+        sender: activeUser,
+        time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+        text: `🛰️ Actualicé el Cube GPS Pro (${t.cubeGps.deviceId}) del remolque #${t.trailerNumber}: 📍 ${t.cubeGps.locationLabel}`
+      });
+
+      saveState();
+      closeCubeGpsModal();
+      renderAll();
+      focusTrailerOnMap(t.id);
+    }
+
+    function updateGpsFromPhone() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        openNewTrailerModal();
+        return;
+      }
+      if (!navigator.geolocation) {
+        alert("Tu navegador no soporta GPS directo.");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          t.cubeGps.lat = Number(pos.coords.latitude.toFixed(5));
+          t.cubeGps.lng = Number(pos.coords.longitude.toFixed(5));
+          const mph = pos.coords.speed ? Math.round(pos.coords.speed * 2.23694) : t.cubeGps.speedMph;
+          t.cubeGps.speedMph = mph || 0;
+          t.cubeGps.locationLabel = `Ubicación GPS en Vivo (${t.cubeGps.lat}, ${t.cubeGps.lng})`;
+          t.messages.push({
+            sender: activeUser,
+            time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+            text: `📍 Mandé mi ubicación GPS en vivo para el remolque #${t.trailerNumber} (${t.cubeGps.lat}, ${t.cubeGps.lng}).`
+          });
+          saveState();
+          renderAll();
+          focusTrailerOnMap(t.id);
+        },
+        err => {
+          alert("Permite el acceso a Ubicación en tu celular/navegador para mandar tu coordenada GPS en vivo.");
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    // Edit Plates Modal
+    function openEditPlatesModal() {
+      const t = getSelectedTrailer();
+      if (!t) {
+        openNewTrailerModal();
+        return;
+      }
+      document.getElementById("edit-trailer-plate").value = t.trailerPlate;
+      document.getElementById("edit-us-plate").value = t.frontPlateUS;
+      document.getElementById("edit-mx-plate").value = t.frontPlateMX;
+      const modal = document.getElementById("edit-plates-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeEditPlatesModal() {
+      const modal = document.getElementById("edit-plates-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function handleSavePlates(event) {
+      event.preventDefault();
+      const t = getSelectedTrailer();
+      t.trailerPlate = document.getElementById("edit-trailer-plate").value.trim();
+      t.frontPlateUS = document.getElementById("edit-us-plate").value.trim();
+      t.frontPlateMX = document.getElementById("edit-mx-plate").value.trim();
+      saveState();
+      closeEditPlatesModal();
+      renderAll();
+    }
+
+    // New Trailer Modal
+    function openNewTrailerModal() {
+      const modal = document.getElementById("new-trailer-modal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+
+    function closeNewTrailerModal() {
+      const modal = document.getElementById("new-trailer-modal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function handleCreateTrailer(event) {
+      event.preventDefault();
+      const rawNum = document.getElementById("new-trailer-number").value.trim().toUpperCase();
+      const trailerNumber = rawNum.startsWith("TR-") ? rawNum : `TR-${rawNum}`;
+      const trailerPlate = document.getElementById("new-trailer-plate").value.trim();
+      const frontPlateUS = document.getElementById("new-us-plate").value.trim();
+      const frontPlateMX = document.getElementById("new-mx-plate").value.trim();
+      const shipperName = document.getElementById("new-shipper").value.trim();
+      const driverName = document.getElementById("new-driver-name").value.trim() || "Chofer asignado";
+      const peopleCount = Number(document.getElementById("new-people-count").value) || 1;
+      const boxCount = Number(document.getElementById("new-boxes").value) || 1000;
+      const cubeIdInput = document.getElementById("new-cube-id").value.trim();
+      const cubeLinkInput = document.getElementById("new-cube-link").value.trim();
+      const route = document.getElementById("new-route").value.trim();
+
+      const newTrailer = {
+        id: trailerNumber,
+        trailerNumber,
+        status: "Cargando en Los Ángeles (LA)",
+        statusStage: "loading",
+        trailerPlate,
+        frontPlateUS,
+        frontPlateMX,
+        shipperName,
+        cargoDescription: "Mercancía Consolidada (LA ➔ GDL)",
+        peopleCount,
+        boxCount,
+        palletCount: Math.max(1, Math.round(boxCount / 55)),
+        peopleList: [
+          { name: shipperName, boxes: boxCount, receiver: "Entrega en Guadalajara (GDL)" }
+        ],
+        driverName,
+        route,
+        sealNumber: "CTPAT-" + Math.floor(100000 + Math.random() * 900000),
+        cubeGps: {
+          deviceId: cubeIdInput || ("CUBE-PRO-" + trailerNumber.replace("TR-", "")),
+          shareLink: cubeLinkInput || "",
+          lat: 34.0522,
+          lng: -118.2437,
+          speedMph: 0,
+          battery: 100,
+          locationLabel: "Saliendo de Bodega en Los Ángeles, CA rumbo a GDL"
+        },
+        tireTreadUS: {
+          steerLeft: "14/32\"",
+          steerRight: "14/32\"",
+          driveAxles: "12/32\"",
+          trailerAxles: "11/32\"",
+          psiStatus: "105 PSI",
+          statusLabel: "Pasan al 100% Revisión EE. UU."
+        },
+        checks: [
+          { label: "🇺🇸🇲🇽 Ambas placas delanteras puestas (Americana y Mexicana)", done: true },
+          { label: "🏷️ Placa del remolque limpia y con luz funcionando", done: true },
+          { label: "📦 Cajas contadas en bodega de Los Ángeles (LA) con el embarcador", done: true },
+          { label: "🔒 Sello de seguridad puesto en las puertas de la caja", done: true },
+          { label: "📑 Papeles de Aduana y Carta Porte para llegar a Guadalajara (GDL)", done: true }
+        ],
+        photos: [
+          {
+            title: "Placas Delanteras (Americana y Mexicana)",
+            category: "Placas Delanteras US/MX",
+            author: activeUser,
+            time: "Justo ahora",
+            svgType: "front-plates"
+          }
+        ],
+        messages: [
+          {
+            sender: activeUser,
+            time: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+            text: `¡Listo compadre! Agregué el nuevo remolque #${trailerNumber} de ${shipperName} con ${boxCount.toLocaleString()} cajas.`
+          }
+        ]
+      };
+
+      trailers.unshift(newTrailer);
+      selectedTrailerId = newTrailer.id;
+      saveState();
+      closeNewTrailerModal();
+      renderAll();
+    }
+
+    function renderAll() {
+      renderTrailerSelectorCards();
+      renderSummaryBanner();
+      renderVisualPlates();
+      renderShipperAndBoxes();
+      renderTiresAndChecklist();
+      renderPhotos();
+      renderChat();
+      renderGpsTruckCards();
+      updateMapMarkers();
+      lucide.createIcons();
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadState();
+      renderAll();
+    });
+  </script>
+</body>
+</html>
